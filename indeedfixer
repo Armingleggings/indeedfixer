@@ -1,0 +1,156 @@
+// ==UserScript==
+// @name         Indeed fixer
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  LinkedIn lacks very basic features that would help so I'm going to write them myself.
+// @author       Jeremy Duffy
+// @match        https://www.indeed.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=glassdoor.com
+// @grant        none
+// @require https://code.jquery.com/jquery-3.6.0.min.js
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const badTitles = ['engineer','principal','director']; // lowercase titles you wouldn't want. Erase or add as needed
+    const myStateCode = 'wa'; // Your state two letter code - lower case
+    const badCompanies = ['coinbase','talentify'];
+    const minWageHr = "72"; // SET TO 0 TO DISABLE THIS CHECK! hourly wage min - if it's listed and less then this, it gets culled
+    const minWageYr = "150000"; // SET TO 0 TO DISABLE THIS CHECK! if it's listed and less than this, it gets culled.
+    const testOnly = false; // when true, bad entries are dimmed and outlined in red instead of removed. Helpful if you worry that the script isn't working properly and will remove the wrong things. Change to "false" if you want to remove the entries instead
+
+    function noGood(toTest){
+
+        var testTitle = '';
+        var testComp = '';
+        var i;
+
+        // Mark this so we don't constantly rehash it.
+	    if ($(toTest).hasClass('fixerChecked')) return;
+        $(toTest).addClass('fixerChecked');
+
+
+        testTitle = $(toTest).find('.jcs-JobTitle').text().toLowerCase().trim();
+        console.log('checking '+testTitle+'\n');
+        if (!testTitle.length) return 0;
+
+        for (i=0; i< badTitles.length; i++){
+            if (testTitle.indexOf(badTitles[i]) != -1) {
+                dumpJob(toTest,'Blacklisted title '+badTitles[i]);
+                return 1;
+            }
+        }
+
+
+        testComp = $(toTest).find('.companyName').text().toLowerCase().trim();
+        for (i=0; i< badCompanies.length; i++)
+            if (testComp.indexOf(badCompanies[i]) != -1) {
+                dumpJob(toTest,'Blacklisted company '+badCompanies[i]);
+                return 1;
+            }
+
+
+        // If survived title, check location
+
+        var city = null;
+        var state = null;
+        var company = null;
+        var cityState = null;
+        var jobLocation = $(toTest).find('.companyLocation').text().toLowerCase().trim();
+        var remote = (jobLocation.indexOf('remote') != -1);
+
+        // If it's remote, we're good. Only check state if it's not
+        if (!remote) {
+            cityState = jobLocation.match(/^([a-z ]+), ([a-z]{2})$/m);
+            if (!cityState) // one more format to try
+                cityState = jobLocation.match(/^([a-z ]+), ([a-z]{2})[^0-9]/m);
+            //console.log(cityState);
+            // We only test location if we recognized it's pattern. If we didn't, just leave it alone to be safe
+            if (cityState) {
+                city = cityState[1];
+                state = cityState[2];
+                if ((state && state != myStateCode)) {
+                    dumpJob(toTest,'Not remote or in my state ('+myStateCode+' vs '+state+')');
+                    return 1;
+                }
+            }
+        }
+
+        if (minWageYr) {
+            var payYr = $(toTest).find('.salary-snippet-container').text().trim().match(/\$([0-9,]{6,7})/g);
+            if (payYr) {
+                // Capture groups are ignored when using the global flag for some reasons so I ahve to manually remove some things
+                var thePay = payYr.pop().replace(/[\$,]/gi,'');
+                thePay = parseFloat(thePay);
+                console.log(thePay);
+                if (thePay < minWageYr) {
+                    dumpJob(toTest,"Yearly too low! Desired: "+minWageYr+" vs actual: "+thePay);
+                    return 1;
+                }
+            }
+        }
+
+        return 0;
+    }
+    // In a function to more easily switch between testing and actual removing.
+    function dumpJob(toDump,reason) {
+
+        $(toDump).addClass('rremoved');
+        // Dirty hack. I couldn't figure out why the code kept running on the same items
+        if ($(toDump).find('.fix_reason').length) return;
+
+
+        var title = $(toDump).find('.jcs-JobTitle').text().toLowerCase().trim();
+        console.log('Dumping '+title+'\n::Reason: '+reason);
+        var tempHold = $(toDump).find('a').remove();
+        $(toDump).find('table').remove();
+        $(toDump).find('.job_seen_beacon').append(tempHold);
+        $(toDump).find('.job_seen_beacon').append('<div class="fix_reason">Removed: '+reason+'</div>');
+    }
+
+    $(document).ready(function(){
+
+        $("body").append(`
+
+        <style>
+        .rremoved .slider_container {
+            border: 1px solid #9d19267a !important;
+        }
+        .rremoved .fix_reason {
+            padding: 6px;
+            font-size: 13px;
+            color: #aa6600;
+        }
+        .rremoved a {
+            font-size: 14px !important;
+            font-weight: bold;
+            padding: 6px;
+            display: block;
+            color: #777 !important;
+        }
+
+        </style>
+        `);
+
+        function fixIndeed(){
+            //if (testOnly) console.log('fixing');
+            $(document).find('.jobsearch-ResultsList .result').each(function(){
+                // Check for my custom class so we're not thrashing on the same stuff we already checked
+                if ($(this).hasClass('fixChecked')) return;
+                noGood(this);
+            });
+        }
+
+        var jobCatcher;
+        var scrollT;
+        // Because results come in via Javascript
+        jobCatcher = setInterval(function(){
+            $('.jobsearch-ResultsList .result').each(function(){
+				// We've already dealt with this one
+                fixIndeed();
+            });
+        },1000);
+    });
+
+})();
