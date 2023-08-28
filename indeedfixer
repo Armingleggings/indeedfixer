@@ -2,7 +2,7 @@
 // @name         Indeed fixer
 // @namespace    http://tampermonkey.net/
 // @version      0.1
-// @description  LinkedIn lacks very basic features that would help so I'm going to write them myself.
+// @description  LinkedIn lacks very basic features that would help so I'm going to write them myself. Updated 2023 Aug 28 - new class and ID names.
 // @author       Jeremy Duffy
 // @match        https://www.indeed.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=glassdoor.com
@@ -16,8 +16,8 @@
     const badTitles = ['engineer','principal','director']; // lowercase titles you wouldn't want. Erase or add as needed
     const myStateCode = 'wa'; // Your state two letter code - lower case
     const badCompanies = ['coinbase','talentify'];
-    const minWageHr = "72"; // SET TO 0 TO DISABLE THIS CHECK! hourly wage min - if it's listed and less then this, it gets culled
-    const minWageYr = "150000"; // SET TO 0 TO DISABLE THIS CHECK! if it's listed and less than this, it gets culled.
+    const minWageHr = "70"; // SET TO 0 TO DISABLE THIS CHECK! hourly wage min - if it's listed and less then this, it gets culled
+    const minWageYr = "140000"; // SET TO 0 TO DISABLE THIS CHECK! if it's listed and less than this, it gets culled.
     const testOnly = false; // when true, bad entries are dimmed and outlined in red instead of removed. Helpful if you worry that the script isn't working properly and will remove the wrong things. Change to "false" if you want to remove the entries instead
 
     function noGood(toTest){
@@ -109,6 +109,15 @@
         $(toDump).find('.job_seen_beacon').append('<div class="fix_reason">Removed: '+reason+'</div>');
     }
 
+    function fixIndeed(){
+        //if (testOnly) console.log('fixing');
+        $(document).find('#mosaic-jobResults li').each(function(){
+            // Check for my custom class so we're not thrashing on the same stuff we already checked
+            if ($(this).hasClass('fixChecked')) return;
+            noGood(this);
+        });
+    }
+
     $(document).ready(function(){
 
         $("body").append(`
@@ -133,20 +142,11 @@
         </style>
         `);
 
-        function fixIndeed(){
-            //if (testOnly) console.log('fixing');
-            $(document).find('.jobsearch-ResultsList .result').each(function(){
-                // Check for my custom class so we're not thrashing on the same stuff we already checked
-                if ($(this).hasClass('fixChecked')) return;
-                noGood(this);
-            });
-        }
-
         var jobCatcher;
         var scrollT;
         // Because results come in via Javascript
         jobCatcher = setInterval(function(){
-            $('.jobsearch-ResultsList .result').each(function(){
+            $('#mosaic-jobResults li:not(.fixChecked)').each(function(){
 				// We've already dealt with this one
                 fixIndeed();
             });
