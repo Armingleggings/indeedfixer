@@ -17,8 +17,18 @@
     const myStateCode = 'wa'; // Your state two letter code - lower case
     const badCompanies = ['coinbase','talentify'];
     const minWageHr = "70"; // SET TO 0 TO DISABLE THIS CHECK! hourly wage min - if it's listed and less then this, it gets culled
+    const minWageMo = "10000"; // SET TO 0 TO DISABLE THIS CHECK! if it's listed and less than this, it gets culled.
     const minWageYr = "140000"; // SET TO 0 TO DISABLE THIS CHECK! if it's listed and less than this, it gets culled.
     const testOnly = false; // when true, bad entries are dimmed and outlined in red instead of removed. Helpful if you worry that the script isn't working properly and will remove the wrong things. Change to "false" if you want to remove the entries instead
+
+    function getSalary(toTest,pattern) {
+        var test = $(toTest).find('.salary-snippet-container').text().trim().match(pattern);
+        if (!test)
+            test = $(toTest).find('.salaryOnly').text().trim().match(pattern);
+       if (Array.isArray(test))
+           return test.pop();
+       return test;
+    }
 
     function noGood(toTest){
 
@@ -59,6 +69,7 @@
         var cityState = null;
         var jobLocation = $(toTest).find('.companyLocation').text().toLowerCase().trim();
         var remote = (jobLocation.indexOf('remote') != -1);
+        var thePay = null;
 
         // If it's remote, we're good. Only check state if it's not
         if (!remote) {
@@ -77,18 +88,51 @@
             }
         }
 
-        if (minWageYr) {
-            var payYr = $(toTest).find('.salary-snippet-container').text().trim().match(/\$([0-9,]{6,7})/g);
-            if (payYr) {
-                // Capture groups are ignored when using the global flag for some reasons so I ahve to manually remove some things
-                var thePay = payYr.pop().replace(/[\$,]/gi,'');
-                thePay = parseFloat(thePay);
-                console.log(thePay);
-                if (thePay < minWageYr) {
-                    dumpJob(toTest,"Yearly too low! Desired: "+minWageYr+" vs actual: "+thePay);
-                    return 1;
-                }
+        var payYr = getSalary(toTest,/\$([0-9,\.K]*) a year/g);
+        var payHr = getSalary(toTest,/\$([0-9\.]*) an hour/g);
+        var payMo = getSalary(toTest,/\$([0-9,]*) a month/g);
+        console.log(payYr+': Extracted Yearly');
+        console.log(payHr+': Extracted hourly');
+        console.log(payMo+': Extracted monthly');
+
+        if (minWageYr && payYr) {
+			// Capture groups are ignored when using the global flag for some reasons so I ahve to manually remove some things
+			var thousands = false;
+			if (payYr.indexOf('K') !== -1)
+				thousands = true;
+			thePay = payYr.replace(/[\$,K]/gi,'');
+			thePay = parseFloat(thePay);
+			if (thousands)
+            	thePay = thePay * 1000;
+			console.log(thePay+' per year');
+			if (thePay < minWageYr) {
+				dumpJob(toTest,"Yearly too low! Desired: "+minWageYr+"/yr vs actual: "+thePay);
+				return 1;
+			}
+        }
+
+        if (minWageMo && payMo) {
+			// Capture groups are ignored when using the global flag for some reasons so I ahve to manually remove some things
+			thePay = payMo.replace(/[\$,]/gi,'');
+			thePay = parseFloat(thePay);
+			console.log(thePay+' Per month');
+			if (thePay < minWageMo) {
+				dumpJob(toTest,"Monthly too low! Desired: "+minWageMo+"/month vs actual: "+thePay);
+				return 1;
             }
+        }
+
+        if (minWageHr && payHr) {
+			// Capture groups are ignored when using the global flag for some reasons so I ahve to manually remove some things
+			thePay = payHr.replace(/[\$,]/gi,'');
+			if (thePay.indexOf('.') !== -1)
+				thePay = thePay.split('.')[0];
+			thePay = parseFloat(thePay);
+			console.log(thePay+' Per hour');
+			if (thePay < minWageHr) {
+				dumpJob(toTest,"Hourly too low! Desired: "+minWageHr+"/hr vs actual: "+thePay);
+				return 1;
+			}
         }
 
         return 0;
